@@ -1,4 +1,10 @@
 /* This code is pretty sloppy right now. Sorry for the mess. */
+const MODES = {
+	NORMAL: 'NORMAL',
+	SOLO: 'SOLO',
+};
+
+let mode = MODES.SOLO;
 
 function showAbout() {
 	alert("Feel free to message suggestions to me on discord at qhp#5615.\n\n" +
@@ -19,23 +25,27 @@ function showInstructions() {
 	);
 }
 
-const tick_length  = 600;
+const tick_length = 600;
 
-const maze_width   = 14;
-const maze_height  = 15;
+
+const maze_width = 14;
+const maze_height = 15;
 const max_x_change = 5;
-const path_turns   = 8;
-const tornado_row  = 4;
+const path_turns = 8;
+const tornado_row = 4;
+// number of pixels between the two mazes in solo mode
+const solo_maze_padding = 50;
 
 var viewport_height = window.innerHeight;
 var viewport_width = window.innerWidth;
 var view_ratio = viewport_width / viewport_height;
 
-var tile_size      = 40;
-var tile_stroke  = tile_size/25;
-var solv_fontsize  = 15*(tile_size/40);
-var offset_optimal = solv_fontsize/2;
-var offset_user    = -offset_optimal;
+var tile_size = 40;
+var tile_stroke = tile_size / 25;
+var solv_fontsize = 15 * (tile_size / 40);
+var offset_optimal = solv_fontsize / 2;
+var offset_user = -offset_optimal;
+var maze_origins = [];
 
 const color_mazeback = "#323232";
 const color_tilepath = "#961919";
@@ -49,7 +59,7 @@ const color_lineplay = "#6495ED";
 const color_circmove = "#FFFFFF";
 const color_circpass = "#008000";
 const color_circfail = "#DC143C";
-const solv_font      = "Arial";
+const solv_font = "Arial";
 
 var canvas = document.getElementById("sotetseg-maze");
 var ctx = canvas.getContext("2d");
@@ -60,9 +70,10 @@ var imgTornado = new Image();
 imgTornado.src = "tornado.png";
 
 class Point {
-	constructor(x, y) {
+	constructor(x, y, maze_idx) {
 		this.x = x;
 		this.y = y;
+		this.maze_idx = maze_idx;
 	}
 }
 
@@ -72,31 +83,69 @@ function resize() {
 
 	if (viewport_width / viewport_height < 0.77) {
 		if (viewport_width < 620) {
-			tile_size = (viewport_width - 20)/maze_width; // 30 is just buffer space
+			tile_size = (viewport_width - 20) / maze_width; // 30 is just buffer space
 		}
 	} else {
 		if (viewport_height < 800) {
-			tile_size = (viewport_height - 200)/maze_height; // 200 is buffer space for the buttons/text above/below the maze
+			tile_size = (viewport_height - 200) / maze_height; // 200 is buffer space for the buttons/text above/below the maze
 		}
 	}
 
-	tile_stroke  = tile_size/25;
-	solv_fontsize  = 15*(tile_size/40);
-	offset_optimal = solv_fontsize/2;
-	offset_user    = -offset_optimal;
+	tile_stroke = tile_size / 25;
+	solv_fontsize = 15 * (tile_size / 40);
+	offset_optimal = solv_fontsize / 2;
+	offset_user = -offset_optimal;
 
-	canvas.width = tile_size * maze_width;
-	canvas.height = tile_size * (maze_height); // need +1 for the extra row at the top to run off the maze, if desired.
+	const maze_width_px = tile_size * maze_width;
+	const maze_height_px = tile_size * maze_height;
+
+	switch (mode) {
+		case MODES.NORMAL:
+			canvas.width = maze_width_px;
+			canvas.height = maze_height_px;
+			maze_origins = [
+				{ x: 0, y: 0 },
+			];
+			break;
+
+		case MODES.SOLO:
+			canvas.width = 2 * maze_width_px + solo_maze_padding;
+			canvas.height = maze_height_px;
+			maze_origins = [
+				{ x: 0, y: 0 },
+				{ x: maze_width_px + solo_maze_padding, y: 0 },
+			];
+			break;
+	}
 
 	drawState();
 }
 
 function getTileClicked(event) {
-	let rect = canvas.getBoundingClientRect();
-	let pixel_x = event.clientX - rect.left;
-	let pixel_y = event.clientY - rect.top;
-	let tile_x = Math.floor(pixel_x / tile_size);
-	let tile_y = Math.floor(pixel_y / tile_size);
+	const maze_width_px = maze_width * tile_size;
+	const maze_height_px = maze_height * tile_size;
+
+	const rect = canvas.getBoundingClientRect();
+	const pixel_x = event.clientX - rect.left;
+	const pixel_y = event.clientY - rect.top;
+
+	for (let maze_idx = 0; maze_idx < maze_origins.length; maze_idx++) {
+		const maze_origin = maze_origins[maze_idx];
+		// the clicked pixel relative to the maze's origin
+		const maze_x = pixel_x - maze_origin.x;
+		const maze_y = pixel_y - maze_origin.y;
+
+		const is_point_in_maze = maze_x >= 0 &&
+			maze_y >= 0 &&
+			maze_x <= maze_width_px &&
+			maze_y <= maze_height_px;
+
+		if (is_point_in_maze) {
+			const tile_x = Math.floor(maze_x / tile_size);
+			const tile_y = Math.floor(maze_y / tile_size);
+			return new Point(tile_x, tile_y, maze_idx);
+		}
+	}
 	return { x: tile_x, y: tile_y };
 }
 
@@ -113,8 +162,8 @@ function drawPathTile(x, y) {
 		ctx.fillStyle = color_circfail;
 		team_damaged = true;
 	}
-	ctx.beginPath(pos_x, pos_y, pos_x+tile_size, pos_y+tile_size);
-	ctx.arc(pos_x+tile_size/2, pos_y+tile_size/2, tile_size/4, 0, 2*Math.PI);
+	ctx.beginPath(pos_x, pos_y, pos_x + tile_size, pos_y + tile_size);
+	ctx.arc(pos_x + tile_size / 2, pos_y + tile_size / 2, tile_size / 4, 0, 2 * Math.PI);
 	ctx.fill();
 }
 
@@ -122,8 +171,8 @@ function drawMoveTile(x, y) {
 	let pos_x = tile_size * x;
 	let pos_y = tile_size * y;
 	ctx.strokeStyle = color_circmove;
-	ctx.beginPath(pos_x, pos_y, pos_x+tile_size, pos_y+tile_size);
-	ctx.arc(pos_x+tile_size/2, pos_y+tile_size/2, tile_size/3.4, 0, 2*Math.PI);
+	ctx.beginPath(pos_x, pos_y, pos_x + tile_size, pos_y + tile_size);
+	ctx.arc(pos_x + tile_size / 2, pos_y + tile_size / 2, tile_size / 3.4, 0, 2 * Math.PI);
 	ctx.stroke();
 }
 
@@ -139,9 +188,9 @@ function drawTargetTile() {
 		tile_size - tile_stroke * 2,
 		tile_size - tile_stroke * 2
 	);
-	ctx.beginPath(pos_x, pos_y, pos_x+tile_size, pos_y+tile_size);
-	ctx.arc(pos_x+tile_size/2, pos_y+tile_size/2, tile_size/3.4, 0, 2*Math.PI);
-	ctx.lineWidth = tile_stroke*1.2;
+	ctx.beginPath(pos_x, pos_y, pos_x + tile_size, pos_y + tile_size);
+	ctx.arc(pos_x + tile_size / 2, pos_y + tile_size / 2, tile_size / 3.4, 0, 2 * Math.PI);
+	ctx.lineWidth = tile_stroke * 1.2;
 	ctx.strokeStyle = color_tilesolv;
 	ctx.stroke();
 }
@@ -158,19 +207,24 @@ function drawMazeTile(x, y, color_tile) {
 		tile_size - tile_stroke * 2,
 		tile_size - tile_stroke * 2
 	);
-	ctx.beginPath(pos_x, pos_y, pos_x+tile_size, pos_y+tile_size);
-	ctx.arc(pos_x+tile_size/2, pos_y+tile_size/2, tile_size/3.4, 0, 2*Math.PI);
-	ctx.lineWidth = tile_stroke*1.2;
+	ctx.beginPath(pos_x, pos_y, pos_x + tile_size, pos_y + tile_size);
+	ctx.arc(pos_x + tile_size / 2, pos_y + tile_size / 2, tile_size / 3.4, 0, 2 * Math.PI);
+	ctx.lineWidth = tile_stroke * 1.2;
 	ctx.strokeStyle = color_tile;
 	ctx.stroke();
 }
 
-function drawMaze() {
+function drawMaze(maze_origin) {
+	ctx.save();
+	ctx.translate(maze_origin.x, maze_origin.y);
+
 	for (let x = 0; x < maze.length; x++) {
 		for (let y = 0; y < maze[x].length; y++) {
 			drawMazeTile(x, y, maze[x][y] ? color_tilepath : color_tilenogo);
 		}
 	}
+
+	ctx.restore();
 }
 
 function pathWeighting() {
@@ -232,7 +286,7 @@ function makeSeed() {
 	seed = new Array(path_turns);
 	seed[0] = randRange(1, maze_width - 1); // 1 lower bound because maze cannot start on far west tile
 	for (let i = 1; i < seed.length; i++) {
-		seed[i] = randRange(Math.max(seed[i-1] - max_x_change, 0), Math.min(seed[i-1] + max_x_change, maze_width - 1));
+		seed[i] = randRange(Math.max(seed[i - 1] - max_x_change, 0), Math.min(seed[i - 1] + max_x_change, maze_width - 1));
 	}
 }
 
@@ -270,7 +324,7 @@ function drawText() {
 	for (let x = 0; x < maze_width; x++) {
 		for (let y = 0; y < maze_height; y++) {
 			if (maze[x][y]) {
-				ctx.fillText(`(${weighted_maze[x][y]})`, x*tile_size + tile_size*0.5, y*tile_size + tile_size*0.5);
+				ctx.fillText(`(${weighted_maze[x][y]})`, x * tile_size + tile_size * 0.5, y * tile_size + tile_size * 0.5);
 			}
 		}
 	}
@@ -282,7 +336,7 @@ function drawCoords() {
 	for (let x = 0; x < maze_width; x++) {
 		for (let y = 0; y < maze_height; y++) {
 			if (maze[x][y]) {
-				ctx.fillText(`(${x}, ${y})`, x*tile_size + tile_size*0.5, y*tile_size + tile_size*0.5);
+				ctx.fillText(`(${x}, ${y})`, x * tile_size + tile_size * 0.5, y * tile_size + tile_size * 0.5);
 			}
 		}
 	}
@@ -386,26 +440,26 @@ function drawEndGame() {
 }
 
 function drawSolutionMoves() {
-	ctx.lineWidth = solv_fontsize/3;
+	ctx.lineWidth = solv_fontsize / 3;
 	ctx.textAlign = "center";
 	ctx.fillStyle = color_linesolv;
 	ctx.strokeStyle = "black";
 	ctx.font = `bold ${solv_fontsize}px ${solv_font}`;
 	for (let i = 0; i < optimal_tickpos.length; i++) {
-		ctx.strokeText(`${i+1}`, optimal_tickpos[i].x*tile_size + tile_size*0.5, optimal_tickpos[i].y*tile_size + offset_optimal + tile_size*0.5 + solv_fontsize*0.3);
-		ctx.fillText(`${i+1}`, optimal_tickpos[i].x*tile_size + tile_size*0.5, optimal_tickpos[i].y*tile_size + offset_optimal + tile_size*0.5 + solv_fontsize*0.3);
+		ctx.strokeText(`${i + 1}`, optimal_tickpos[i].x * tile_size + tile_size * 0.5, optimal_tickpos[i].y * tile_size + offset_optimal + tile_size * 0.5 + solv_fontsize * 0.3);
+		ctx.fillText(`${i + 1}`, optimal_tickpos[i].x * tile_size + tile_size * 0.5, optimal_tickpos[i].y * tile_size + offset_optimal + tile_size * 0.5 + solv_fontsize * 0.3);
 	}
 }
 
 function drawUserMoves() {
-	ctx.lineWidth = solv_fontsize/3;
+	ctx.lineWidth = solv_fontsize / 3;
 	ctx.textAlign = "center";
 	ctx.fillStyle = color_lineplay;
 	ctx.strokeStyle = "black";
 	ctx.font = `bold ${solv_fontsize}px ${solv_font}`;
 	for (let i = 0; i < moves.length; i++) {
-		ctx.strokeText(`${i+1}`, moves[i].x*tile_size + tile_size*0.5, moves[i].y*tile_size + offset_user + tile_size*0.5 + solv_fontsize*0.3);
-		ctx.fillText(`${i+1}`, moves[i].x*tile_size + tile_size*0.5, moves[i].y*tile_size + offset_user + tile_size*0.5 + solv_fontsize*0.3);
+		ctx.strokeText(`${i + 1}`, moves[i].x * tile_size + tile_size * 0.5, moves[i].y * tile_size + offset_user + tile_size * 0.5 + solv_fontsize * 0.3);
+		ctx.fillText(`${i + 1}`, moves[i].x * tile_size + tile_size * 0.5, moves[i].y * tile_size + offset_user + tile_size * 0.5 + solv_fontsize * 0.3);
 	}
 }
 
@@ -419,7 +473,7 @@ function getNextPathTile(c_pos, o_pos) {
 		if (neighbors[i].x < 0 || neighbors[i].x >= maze_width) {
 			continue;
 		}
-		if (neighbors[i].y < 0 || neighbors[i].y >= maze_height){
+		if (neighbors[i].y < 0 || neighbors[i].y >= maze_height) {
 			continue;
 		}
 		if (maze[neighbors[i].x][neighbors[i].y] == false) {
@@ -486,11 +540,11 @@ function drawMoves() {
 }
 
 function drawTornado() {
-	ctx.drawImage(imgTornado, tornado_position.x*tile_size+tile_size*0.1, tornado_position.y*tile_size+tile_size*0.1, tile_size*0.8, tile_size*0.8);
+	ctx.drawImage(imgTornado, tornado_position.x * tile_size + tile_size * 0.1, tornado_position.y * tile_size + tile_size * 0.1, tile_size * 0.8, tile_size * 0.8);
 }
 
 function drawState() {
-	drawMaze();
+	maze_origins.forEach(drawMaze)
 	drawstalledTiles();
 	drawPassedTiles();
 	drawMoves();
@@ -512,11 +566,11 @@ function showSolution() {
 }
 
 function writePar() {
-	document.getElementById("par").innerHTML = `Best possible time: ${(optimal_tickpos.length * tick_length/1000).toFixed(1)} seconds (${optimal_tickpos.length} ticks)`;
+	document.getElementById("par").innerHTML = `Best possible time: ${(optimal_tickpos.length * tick_length / 1000).toFixed(1)} seconds (${optimal_tickpos.length} ticks)`;
 }
 
 function writeTime() {
-	let timerMsg = `${(ticks * tick_length/1000).toFixed(1)} seconds (${ticks} ticks, ${ticks_stalled} stalled)`;
+	let timerMsg = `${(ticks * tick_length / 1000).toFixed(1)} seconds (${ticks} ticks, ${ticks_stalled} stalled)`;
 	if (moves.length > 0 && moves[0].y != maze_height - 1) {
 		timerMsg += " but you skipped the first tile";
 		if (team_damaged) {
@@ -554,7 +608,7 @@ function gameTick() {
 		clearInterval(timerTick);
 	}
 	writeTime();
-	
+
 	// Testing time between ticks (on my PC varies from 590-610 ms, which is actually better than OSRS servers)
 	// if (time_a) {
 	// 	time_b = performance.now();
