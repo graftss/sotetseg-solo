@@ -79,7 +79,7 @@ class Point {
 
 const color_solomarker = "#00FF00";
 const solomarker_xs = [2, 5, 8, 11];
-const solomarker_ys = [2, 5, 8, 11];
+const solomarker_ys = [2, 5, 9, 12];
 const solomarker_points = solomarker_xs.flatMap(x => solomarker_ys.map(y => new Point(x, y, 0)));
 
 function withMazeTranslation(maze_idx, f) {
