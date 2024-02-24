@@ -77,6 +77,11 @@ class Point {
 	}
 }
 
+const color_solomarker = "#00FF00";
+const solomarker_xs = [2, 5, 8, 11];
+const solomarker_ys = [2, 5, 8, 11];
+const solomarker_points = solomarker_xs.flatMap(x => solomarker_ys.map(y => new Point(x, y, 0)));
+
 function withMazeTranslation(maze_idx, f) {
 	console.log({ maze_idx });
 	const { x, y } = maze_origins[maze_idx];
@@ -225,10 +230,21 @@ function drawMazeTile(x, y, color_tile) {
 	ctx.stroke();
 }
 
+function drawTileBorder(x, y, color_tile) {
+	let pos_x = tile_size * x;
+	let pos_y = tile_size * y;
+	ctx.strokeStyle = color_tile;
+	ctx.strokeRect(
+		pos_x + tile_stroke,
+		pos_y + tile_stroke,
+		tile_size - tile_stroke * 2,
+		tile_size - tile_stroke * 2
+	);
+}
+
 function drawMazes() {
 	drawMaze(0, true);
 	if (mode === MODES.SOLO) {
-		console.log('drawMazes')
 		drawMaze(1, false);
 	}
 }
@@ -240,6 +256,11 @@ function drawMaze(maze_idx, show_path) {
 				const color_tile = (show_path && maze[x][y]) ? color_tilepath : color_tilenogo;
 				drawMazeTile(x, y, color_tile);
 			}
+		}
+
+		for (let i = 0; i < solomarker_points.length; i++) {
+			const point = solomarker_points[i];
+			drawTileBorder(point.x, point.y, color_solomarker);
 		}
 	});
 }
