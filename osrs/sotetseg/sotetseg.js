@@ -45,7 +45,7 @@ var tile_stroke = tile_size / 25;
 var solv_fontsize = 15 * (tile_size / 40);
 var offset_optimal = solv_fontsize / 2;
 var offset_user = -offset_optimal;
-var maze_origins = [];
+var maze_origins = [{ x: 0, y: 0 }];
 
 const color_mazeback = "#323232";
 const color_tilepath = "#961919";
@@ -75,6 +75,15 @@ class Point {
 		this.y = y;
 		this.maze_idx = maze_idx;
 	}
+}
+
+function withMazeTranslation(maze_idx, f) {
+	console.log({ maze_idx });
+	const { x, y } = maze_origins[maze_idx];
+	ctx.save();
+	ctx.translate(x, y);
+	f();
+	ctx.restore();
 }
 
 function resize() {
@@ -131,6 +140,7 @@ function getTileClicked(event) {
 
 	for (let maze_idx = 0; maze_idx < maze_origins.length; maze_idx++) {
 		const maze_origin = maze_origins[maze_idx];
+
 		// the clicked pixel relative to the maze's origin
 		const maze_x = pixel_x - maze_origin.x;
 		const maze_y = pixel_y - maze_origin.y;
@@ -167,9 +177,10 @@ function drawPathTile(x, y) {
 	ctx.fill();
 }
 
-function drawMoveTile(x, y) {
-	let pos_x = tile_size * x;
-	let pos_y = tile_size * y;
+function drawMoveTile(point) {
+	const { x, y, maze_idx } = point;
+	const pos_x = tile_size * x;
+	const pos_y = tile_size * y;
 	ctx.strokeStyle = color_circmove;
 	ctx.beginPath(pos_x, pos_y, pos_x + tile_size, pos_y + tile_size);
 	ctx.arc(pos_x + tile_size / 2, pos_y + tile_size / 2, tile_size / 3.4, 0, 2 * Math.PI);
@@ -214,17 +225,23 @@ function drawMazeTile(x, y, color_tile) {
 	ctx.stroke();
 }
 
-function drawMaze(maze_origin) {
-	ctx.save();
-	ctx.translate(maze_origin.x, maze_origin.y);
-
-	for (let x = 0; x < maze.length; x++) {
-		for (let y = 0; y < maze[x].length; y++) {
-			drawMazeTile(x, y, maze[x][y] ? color_tilepath : color_tilenogo);
-		}
+function drawMazes() {
+	drawMaze(0, true);
+	if (mode === MODES.SOLO) {
+		console.log('drawMazes')
+		drawMaze(1, false);
 	}
+}
 
-	ctx.restore();
+function drawMaze(maze_idx, show_path) {
+	withMazeTranslation(maze_idx, () => {
+		for (let x = 0; x < maze.length; x++) {
+			for (let y = 0; y < maze[x].length; y++) {
+				const color_tile = (show_path && maze[x][y]) ? color_tilepath : color_tilenogo;
+				drawMazeTile(x, y, color_tile);
+			}
+		}
+	});
 }
 
 function pathWeighting() {
@@ -528,8 +545,7 @@ canvas.addEventListener('mousedown', function (event) {
 	if (player_position.y <= 0 || (player_position.x == tornado_position.x && player_position.y == tornado_position.y)) {
 		return;
 	}
-	let clickedTile = getTileClicked(event);
-	targeted_tile = new Point(clickedTile.x, clickedTile.y);
+	targeted_tile = getTileClicked(event);
 	drawState();
 });
 
@@ -544,7 +560,7 @@ function drawTornado() {
 }
 
 function drawState() {
-	maze_origins.forEach(drawMaze)
+	drawMazes();
 	drawstalledTiles();
 	drawPassedTiles();
 	drawMoves();
@@ -558,7 +574,7 @@ function drawState() {
 }
 
 function showSolution() {
-	drawMaze();
+	drawMazes();
 	drawstalledTiles();
 	drawPassedTiles();
 	drawMoves();
@@ -659,7 +675,8 @@ function newSession() {
 	maze = makeMaze();
 	pathWeighting();
 	solveMaze();
-	drawMaze(maze);
+	resize();
+	drawMazes();
 	writePar();
 	writeTime();
 }
@@ -669,7 +686,7 @@ function reset() {
 	maze = makeSeededMaze(seed);
 	pathWeighting();
 	solveMaze();
-	drawMaze(maze);
+	drawMazes();
 	writePar();
 	writeTime();
 }
@@ -699,4 +716,3 @@ var path_taken;
 // var time_b;
 
 newSession();
-resize();
